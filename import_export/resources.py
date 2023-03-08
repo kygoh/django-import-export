@@ -11,6 +11,7 @@ from django.conf import settings
 from django.core.exceptions import (
     FieldDoesNotExist,
     ImproperlyConfigured,
+    ObjectDoesNotExist,
     ValidationError,
 )
 from django.core.management.color import no_style
@@ -465,6 +466,46 @@ class Resource(metaclass=DeclarativeMetaclass):
         if errors:
             raise ValidationError(errors)
 
+    def model_to_dict(self, instance):
+        opts = instance._meta
+        data = {}
+        for f in opts.concrete_fields:
+            if f.primary_key and 'AutoField' in f.get_internal_type():
+                continue
+            if not getattr(f, "editable", False):
+                continue
+            value = getattr(instance, f.name)
+            if value:
+                data[f.name] = value
+        return data
+
+    def get_persisted_object(self, instance):
+        params = self.model_to_dict(instance)
+        model = instance._meta.model
+        saved_object = model.objects.get(
+            **params
+        )
+        return saved_object
+
+    def get_or_save_related_object(self, instance):
+        """
+        Takes care of recursively getting or saving related object to the database.
+
+        :param instance: The instance of the related object to be retrieved or persisted.
+        """
+        for field in instance._meta.get_fields():
+            if field.is_relation and field.many_to_one:
+                related_object = getattr(instance, field.name, None)
+                if related_object and related_object._state.adding:
+                    self.get_or_save_related_object(related_object)
+                    try:
+                        saved_object = self.get_persisted_object(related_object)
+                        setattr(instance, field.name, saved_object)
+                    except ObjectDoesNotExist:
+                        if self._meta.clean_model_instances:
+                            related_object.full_clean()
+                        related_object.save()
+
     def save_instance(self, instance, is_create, using_transactions=True, dry_run=False):
         """
         Takes care of saving the object to the database.
@@ -488,6 +529,7 @@ class Resource(metaclass=DeclarativeMetaclass):
                 # we don't have transactions and we want to do a dry_run
                 pass
             else:
+                self.get_or_save_related_object(instance)
                 instance.save()
         self.after_save_instance(instance, using_transactions, dry_run)
 
