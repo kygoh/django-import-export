@@ -32,6 +32,7 @@ from ..models import (
     Book,
     Category,
     Entry,
+    Node,
     Person,
     Profile,
     Role,
@@ -246,6 +247,20 @@ class ResourceTestCase(TestCase):
         with self.assertWarns(DeprecationWarning) as w:
             resource.import_data(dataset, raise_errors=True)
             self.assertEqual(target_msg, str(w.warnings[0].message))
+
+    def test_get_or_save_related_object(self,):
+        grandparent = Node(name='grandparent')
+        parent = Node(parent=grandparent, name='parent')
+        child = Node(parent=parent, name='child')
+        self.my_resource.get_or_save_related_object(child)
+        queryset = Node.objects.all()
+        self.assertEqual(2, len(queryset))
+        grandparent = Node.objects.get(name='grandparent')
+        parent = Node.objects.get(name='parent')
+        self.assertIsNotNone(parent.parent.id)
+        self.assertIsNotNone(parent.id)
+        self.assertEqual(parent.parent.id, grandparent.id)
+        self.assertEqual(2, parent.id)
 
 
 class AuthorResource(resources.ModelResource):
