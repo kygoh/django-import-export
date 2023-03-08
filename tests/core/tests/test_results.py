@@ -1,4 +1,4 @@
-from core.models import Book
+from core.models import Book, Child
 from django.core.exceptions import ValidationError
 from django.test.testcases import TestCase
 from tablib import Dataset
@@ -63,3 +63,9 @@ class ResultTest(TestCase):
         row_result.add_instance_info(BookWithObjectRepr(pk=1, name="some book"))
         self.assertEqual(1, row_result.object_id)
         self.assertEqual("some book", row_result.object_repr)
+
+    def test_add_instance_info_missing_fk(self):
+        row_result = RowResult()
+        row_result.add_instance_info(Child(name="child"))
+        self.assertIsNone(row_result.object_id)
+        self.assertIsNone(row_result.object_repr)
