@@ -40,7 +40,11 @@ class RowResult:
         if instance is not None:
             # Add object info to RowResult (e.g. for LogEntry)
             self.object_id = getattr(instance, "pk", None)
-            self.object_repr = force_str(instance)
+            try:
+                # instance with incomplete data may raise error
+                self.object_repr = force_str(instance)
+            except:
+                pass
 
 
 class InvalidRow:
