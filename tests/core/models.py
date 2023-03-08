@@ -178,3 +178,14 @@ class UUIDBook(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField('Book name', max_length=100)
     categories = models.ManyToManyField(UUIDCategory, blank=True)
+
+
+class Node(models.Model):
+    parent = models.ForeignKey('self', on_delete=models.CASCADE, null=True, blank=True)
+    name = models.CharField(max_length=100)
+
+    def __str__(self):
+        if self.parent:
+            return '%s - child of %s' % (self.name, self.parent.name)
+        else:
+            return '%s - root' % (self.name)
