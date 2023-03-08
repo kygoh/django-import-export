@@ -174,6 +174,35 @@ class ImportExportAdminIntegrationTest(AdminTestMixin, TestCase):
         # Check, that we really use second resource - author_email didn't get imported
         self.assertEqual(Book.objects.get(id=1).author_email, "")
 
+    @override_settings(TEMPLATE_STRING_IF_INVALID='INVALID_VARIABLE')
+    def test_import_related_model(self):
+        # GET the import form
+        response = self.client.get(self.book_import_url)
+        self.assertEqual(response.status_code, 200)
+
+        response = self._do_import_post(self.book_import_url, "books-authors.csv", resource=2)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('result', response.context)
+        self.assertFalse(response.context['result'].has_errors())
+        self.assertIn('confirm_form', response.context)
+        confirm_form = response.context['confirm_form']
+
+        data = confirm_form.initial
+        self.assertEqual(data['original_file_name'], 'books-authors.csv')
+        response = self.client.post(self.book_process_import_url, data, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response,
+            _('Import finished, with {} new and {} updated {}.').format(
+                3, 0, Book._meta.verbose_name_plural)
+        )
+        self.assertEqual(Book.objects.all().count(), 3)
+        self.assertEqual(Book.objects.get(id=1).name, "Some book")
+        self.assertEqual(Book.objects.get(id=2).name, "Another book")
+        self.assertEqual(Book.objects.get(id=3).name, "New book")
+        self.assertEqual(Author.objects.all().count(), 2)
+        self.assertEqual(Author.objects.get(id=1).name, "First Author")
+        self.assertEqual(Author.objects.get(id=2).name, "Second Author")
+
     def test_import_legacy_book(self):
         """
         This test exists solely to test import works correctly using the deprecated
