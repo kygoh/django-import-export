@@ -147,3 +147,37 @@ class Field:
             raise FieldError("Both dehydrate_method and field_name are not supplied.")
 
         return self.dehydrate_method or DEFAULT_DEHYDRATE_METHOD_PREFIX + field_name
+
+
+class ForeignKeyField(Field):
+
+    def save(self, obj, data, is_m2m=False, **kwargs):
+        """
+        If this field is not declared readonly, the object's attribute will
+        be set to the value returned by :meth:`~import_export.fields.Field.clean`.
+        """
+        if not self.readonly:
+            cleaned = self.clean(data, **kwargs)
+            if cleaned is not None or self.saves_null_values:
+                attrs = self.attribute.split('__')
+                for attr in attrs[:-1]:
+                    related_object = getattr(obj, attr, None)
+                    try:
+                        field = obj._meta.get_field(attr)
+                        if field.is_relation and related_object is None:
+                            fk_model = field.remote_field.model
+                            # instantiate foreign key model
+                            related_object = fk_model()
+                            # assign the foreign key instance
+                            setattr(obj, field.name, related_object)
+                    except:
+                        # ignore if obj is not a django model
+                        pass
+                    obj = related_object
+                if not is_m2m:
+                    setattr(obj, attrs[-1], cleaned)
+                else:
+                    if self.m2m_add:
+                        getattr(obj, attrs[-1]).add(*cleaned)
+                    else:
+                        getattr(obj, attrs[-1]).set(cleaned)
