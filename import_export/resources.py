@@ -11,6 +11,7 @@ from django.conf import settings
 from django.core.exceptions import (
     FieldDoesNotExist,
     ImproperlyConfigured,
+    ObjectDoesNotExist,
     ValidationError,
 )
 from django.core.management.color import no_style
@@ -1211,6 +1212,76 @@ class ModelResource(Resource, metaclass=ModelDeclarativeMetaclass):
         if hasattr(cls._meta, 'name'):
             return cls._meta.name
         return cls.__name__
+
+
+class RelatedObjectResource(ModelResource):
+
+    def model_to_dict(self, instance):
+        opts = instance._meta
+        data = {}
+        for f in opts.concrete_fields:
+            if f.primary_key and 'AutoField' in f.get_internal_type():
+                continue
+            if not getattr(f, "editable", False):
+                continue
+            value = getattr(instance, f.name)
+            if value:
+                data[f.name] = value
+        return data
+
+    def get_persisted_object(self, instance):
+        params = self.model_to_dict(instance)
+        model = instance._meta.model
+        persisted_object = model.objects.get(
+            **params
+        )
+        return persisted_object
+
+    def get_or_save_related_object(self, instance):
+        """
+        Takes care of recursively getting or saving related object to the database.
+
+        :param instance: The instance of the related object to be retrieved or persisted.
+        """
+        for field in instance._meta.get_fields():
+            if field.is_relation and field.many_to_one:
+                related_object = getattr(instance, field.name, None)
+                if related_object and related_object._state.adding:
+                    self.get_or_save_related_object(related_object)
+                    try:
+                        persisted_object = self.get_persisted_object(related_object)
+                        setattr(instance, field.name, persisted_object)
+                    except ObjectDoesNotExist:
+                        if self._meta.clean_model_instances:
+                            related_object.full_clean()
+                        related_object.save()
+
+    def save_instance(self, instance, is_create, using_transactions=True, dry_run=False):
+        """
+        Takes care of saving the object to the database.
+
+        Objects can be created in bulk if ``use_bulk`` is enabled.
+
+        :param instance: The instance of the object to be persisted.
+        :param is_create: A boolean flag to indicate whether this is a new object
+        to be created, or an existing object to be updated.
+        :param using_transactions: A flag to indicate whether db transactions are used.
+        :param dry_run: A flag to indicate dry-run mode.
+        """
+        self.before_save_instance(instance, using_transactions, dry_run)
+        if self._meta.use_bulk:
+            if is_create:
+                self.create_instances.append(instance)
+            else:
+                self.update_instances.append(instance)
+        else:
+            if not using_transactions and dry_run:
+                # we don't have transactions and we want to do a dry_run
+                pass
+            else:
+                self.get_or_save_related_object(instance)
+                instance.save()
+        self.after_save_instance(instance, using_transactions, dry_run)
 
 
 def modelresource_factory(model, resource_class=ModelResource):
