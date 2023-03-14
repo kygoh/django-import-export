@@ -1,0 +1,4 @@
+id,book_name,author_email,author_name,author_birthday
+1,Some book,test@example.com,First Author,2001-01-01
+2,Another book,test@example.com,First Author,
+3,New book,second@example.com,Second Author,2002-02-02

@@ -5,7 +5,8 @@ from import_export.admin import (
     ImportExportModelAdmin,
     ImportMixin,
 )
-from import_export.resources import ModelResource
+from import_export.fields import Field, ForeignKeyField
+from import_export.resources import ModelResource, RelatedObjectResource
 
 from .forms import CustomConfirmImportForm, CustomExportForm, CustomImportForm
 from .models import Author, Book, Category, Child, EBook, LegacyBook
@@ -32,10 +33,21 @@ class BookNameResource(ModelResource):
         name = "Export/Import only book names"
 
 
+class BookAuthorResource(RelatedObjectResource):
+    book_name = Field(attribute='name')
+    author_name = ForeignKeyField(attribute='author__name', saves_null_values=False)
+    author_birthday = ForeignKeyField(attribute='author__birthday', saves_null_values=False)
+
+    class Meta:
+        model = Book
+        fields = ['id', 'book_name', 'author_email', 'author_name', 'author_birthday']
+        name = "Import book and author"
+
+
 class BookAdmin(ImportExportModelAdmin):
     list_display = ('name', 'author', 'added')
     list_filter = ['categories', 'author']
-    resource_classes = [BookResource, BookNameResource]
+    resource_classes = [BookResource, BookNameResource, BookAuthorResource]
     change_list_template = "core/admin/change_list.html"
 
 
