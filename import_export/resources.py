@@ -1216,7 +1216,7 @@ class ModelResource(Resource, metaclass=ModelDeclarativeMetaclass):
 
 class RelatedObjectResource(ModelResource):
 
-    def model_to_dict(self, instance):
+    def model_to_lookup_expressions(self, instance, lhs=None):
         opts = instance._meta
         data = {}
         for f in opts.concrete_fields:
@@ -1224,13 +1224,20 @@ class RelatedObjectResource(ModelResource):
                 continue
             if not getattr(f, "editable", False):
                 continue
-            value = getattr(instance, f.name)
+            value = getattr(instance, f.name, None)
             if value:
-                data[f.name] = value
+                if lhs is not None:
+                    lookup = "%s__%s" % (lhs, f.name)
+                else:
+                    lookup = f.name
+                if hasattr(value, '_state') and value._state.adding:
+                    data.update(self.model_to_lookup_expressions(value, lookup))
+                else:
+                    data[lookup] = value
         return data
 
     def get_persisted_object(self, instance):
-        params = self.model_to_dict(instance)
+        params = self.model_to_lookup_expressions(instance)
         model = instance._meta.model
         persisted_object = model.objects.get(
             **params
@@ -1247,7 +1254,9 @@ class RelatedObjectResource(ModelResource):
             if field.is_relation and field.many_to_one:
                 related_object = getattr(instance, field.name, None)
                 if related_object and related_object._state.adding:
-                    self.get_or_save_related_object(related_object)
+                    if instance._meta.model != related_object._meta.model:
+                        # avoid self-referenced models
+                        self.get_or_save_related_object(related_object)
                     try:
                         persisted_object = self.get_persisted_object(related_object)
                         setattr(instance, field.name, persisted_object)
