@@ -32,6 +32,7 @@ from ..models import (
     Book,
     Category,
     Entry,
+    Node,
     Person,
     Profile,
     Role,
@@ -2585,3 +2586,19 @@ class ResourcesHelperFunctionsTest(TestCase):
                 resources.has_natural_foreign_key(model),
                 expected_result
             )
+
+class RelatedObjectResourceTestCase(TestCase):
+
+    def setUp(self):
+        self.my_resource = resources.RelatedObjectResource()
+
+    def test_model_to_lookup_expression(self):
+        grandparent = Node(name='grandparent')
+        parent = Node(parent=grandparent, name='parent')
+        child = Node(parent=parent, name='child')
+        params = self.my_resource.model_to_lookup_expressions(child)
+        self.assertDictEqual(params, {
+            'parent__parent__name': 'grandparent',
+            'parent__name': 'parent',
+            'name': 'child'
+        })
