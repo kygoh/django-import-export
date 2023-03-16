@@ -1216,6 +1216,15 @@ class ModelResource(Resource, metaclass=ModelDeclarativeMetaclass):
 
 class RelatedObjectResource(ModelResource):
 
+    def before_get_or_save_related_object(self, instance):
+        pass
+
+    def after_get_or_save_related_object(self, instance):
+        pass
+
+    def skip_save_related_object(self, instance):
+        return False
+
     def model_to_lookup_expressions(self, instance, lhs=None):
         opts = instance._meta
         data = {}
@@ -1250,6 +1259,7 @@ class RelatedObjectResource(ModelResource):
 
         :param instance: The instance of the related object to be retrieved or persisted.
         """
+        self.before_get_or_save_related_object(instance)
         for field in instance._meta.get_fields():
             if field.is_relation and field.many_to_one:
                 related_object = getattr(instance, field.name, None)
@@ -1261,9 +1271,11 @@ class RelatedObjectResource(ModelResource):
                         persisted_object = self.get_persisted_object(related_object)
                         setattr(instance, field.name, persisted_object)
                     except ObjectDoesNotExist:
-                        if self._meta.clean_model_instances:
-                            related_object.full_clean()
-                        related_object.save()
+                        if not self.skip_save_related_object(related_object):
+                            if self._meta.clean_model_instances:
+                                related_object.full_clean()
+                            related_object.save()
+        self.after_get_or_save_related_object(instance)
 
     def save_instance(self, instance, is_create, using_transactions=True, dry_run=False):
         """
